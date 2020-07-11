@@ -1,0 +1,62 @@
+avviare zoom attaccando USB a RasPi, poi premere knob di mezzo per andare a lista preset, poi premere pulsante centrale zoom, e da lì la zoom è controllabile da RasPi
+
+pi@raspi3:~ $ amidi -l
+Dir Device    Name
+IO  hw:1,0,0  ZOOM MS Series MIDI 1
+pi@raspi3:~ $ amidi --port="hw:1,0,0" -S C001
+
+---
+
+not usb.capdata contains 5a:50:f7 and not usb.capdata contains 5a:16:f7 and not usb.capdata contains 5a:17:45 
+
+---
+
+C0XX metti bank XX, dove XX è il numero in hex della patch (min è 00, max è 31 per MS50G e 63 per G3)
+
+---
+
+sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y bluetooth blueman bluez
+
+ipscan -s -f:range 192.168.3.1 168.168.3.254 
+
+---
+
+amidi -l
+
+ZOOM MS Series MIDI 1
+
+ZOOM G Series MIDI 1
+
+---
+
+amidi --port="hw:1,0,0" -S C009
+
+---
+
+info prese da https://www.vguitarforums.com/smf/index.php?topic=4329.25
+
+MIDI identity request message
+F07E000601F7
+
+Enable "editor mode"
+F052005A50F7
+
+Disable "editor mode"
+F052005A51F7
+
+Request current Bank number (CC00 and CC32) and the current Program number (PC)
+F052005A33F7
+esempio di risposta:
+B0 00 00
+B0 20 00
+C0 08
+
+Request extended info on current patch
+F052005A29F7
+
+---
+
+crontab -e
+
+@reboot /usr/bin/python3 /home/pi/mdfsw/mdfsw.py
+

@@ -1,0 +1,37 @@
+avviare zoom attaccando USB a RasPi, poi premere knob di mezzo per andare a lista preset, poi premere pulsante centrale zoom, e da lì la zoom è controllabile da RasPi
+
+pi@raspi3:~ $ amidi -l
+Dir Device    Name
+IO  hw:1,0,0  ZOOM MS Series MIDI 1
+pi@raspi3:~ $ amidi --port="hw:1,0,0" -S C001
+
+---
+
+C0XX metti bank XX, dove XX è il numero in hex della patch (min è 00, max è 31 per MS50G e 63 per G3)
+
+---
+
+amidi -l
+
+ZOOM MS Series MIDI 1
+
+ZOOM G Series MIDI 1
+
+---
+
+amidi --port="hw:1,0,0" -S C009
+
+---
+
+HX STOMP
+
+Program Change si manda con Cn dove n è il canale hex dove vuoi mandarlo (n da 0 a F per canali da 1 a 16)
+
+Control Change si manda con Bn xx yy dove:
+- n è il canale hex dove vuoi mandarlo (n da 0 a F per canali da 1 a 16)
+- xx è il codice hex del MIDI Message (da tabella) (da 00 a 78 in hex ovvero da 0 a 120 in dec)
+- yy è il valore hex del MIDI value (da 00 a 7F cioè da 0 a 127)
+
+
+
+for m in "B0 47 01" "B0 32 00" "B0 47 03"; do amidi --port="hw:1,0,0" -S $m; done

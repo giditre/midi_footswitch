@@ -1,0 +1,3 @@
+TODO:
+mettere ache pulsantino di reset del Pi esternamente al case
+far segnalare al Pi quando è acceso e quando è spento, magari aggiungendo un LED di attività, o meglio ancora togliere la alimentazione alla ZOOM quando il Pi si spegne (controllando il relè/transistor dallo stesso GPIO che accenderebbe il LED di attività)
