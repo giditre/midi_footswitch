@@ -368,93 +368,36 @@ def transition(s):
       for cmd in new_state_cmd:
         mout(dev_port, cmd, demo)
 
-class MIDIController():
-  def __init__(self):
-    input_pin = {
-      'FSW1': fsw1,
-      'FSW2': fsw2,
-      'FSW3': fsw3,
-      'LSW1': lsw1,
-      'LSW2': lsw2
-    }
-    output_pin = {
-      'LED1': led1,
-      'LED2': led2,
-      'LED3': led3,
-      'LED4': led4,
-      'LED5': led5,
-      'LED6': led6 
-    }
-
-    self.current_state = None
-    self.demo_mode = False
-    self.dev_port = None
-
-  def wait_fsw_released(self, fsw_list=["FSW1", "FSW2", "FSW3"]):
-    while any([gin(self.input_pin[fsw]) == in_True for fsw in fsw_list]):
-      sleep(0.2)
-
-  def read_inputs(self):
-    return { name: gin(self.input_pin[name]) for name in inputs }
-
-  def discover_device(self):
-    dev_name = "HX Stomp"
-    # do the following check periodically, until a device is found or an input combination is met, starting demo mode
-    # check that device is connected and on which port
-    print('Start device discovery')
-    while self.dev_port is None:
-      # look for connected devices
-      amidi_list = [line for line in bash_cmd('amidi -l').split('\n') if dev_name in line]
-      if amidi_list:
-        if len(amidi_list) == 1:
-          self.dev_port = amidi_list[0].split()[1]
-          dev = amidi_list[0].split(self.dev_port)[1].strip()
-          print('Found device ' + dev + ' on port ' + self.dev_port)
-        elif len(amidi_list) > 1:
-          sys.exit("Connect only one {} device at a time!".format(dev_name))
-      else:
-        print("{} device not found. Wait some seconds before retrying".format(dev_name), end='')
-        for i in range(3):
-          print('.', end='')
-          circle(1)
-        print('')
-
 # MAIN      
 
-if __name__ == "__main__":
-
+try:
   # print information on state of inputs
   debug_print_inputs()
-    
-  # instantiate midi controller object
-  mc = MIDIController()
-
-  try:
-    # do device discovery
-    mc.discover_device()
-    #print(mc.dev_port)
-
-    # enter infinite loop
-    while True:
-      # chech lever switch position
-      lsw = lsw_pos()
-      # check if any footswitch is pressed
-      fsw = 1 if gin(fsw1) == in_True else 2 if gin(fsw2) == in_True else 3 if gin(fsw3) == in_True else 0
-      # set current_state as explained in transition function
-      current_state = 10*lsw + fsw
-      # check if state has changed
-      if current_state != get_state(0):
-        # update states dict
-        set_state(current_state)
-        # print(states)
-        # apply the effects of the transition
-        transition(current_state)
-        # block until footswitch is not released
-        mc.wait_fsw_released()
-      # sleep some time before checking input again
-      sleep(0.03)
-  except KeyboardInterrupt:
-    print('\n\nClean up and exit.\n')
-    #mout(dev_port, disable_edit_mode)
-    GPIO.cleanup()
+  # do device discovery
+  discover()
+  # enter infinite loop
+  while True:
+    # chech lever switch position
+    lsw = lsw_pos()
+    # check if any footswitch is pressed
+    fsw = 1 if gin(fsw1) == in_True else 2 if gin(fsw2) == in_True else 3 if gin(fsw3) == in_True else 0
+    # set current_state as explained in transition function
+    current_state = 10*lsw + fsw
+    # check if state has changed
+    if current_state != get_state(0):
+      # update states dict
+      set_state(current_state)
+      # print(states)
+      # apply the effects of the transition
+      transition(current_state)
+      # block until footswitch is not released
+      while fsw:
+        fsw = 1 if gin(fsw1) == in_True else 2 if gin(fsw2) == in_True else 3 if gin(fsw3) == in_True else 0
+        sleep(0.03)
+    # sleep some time before checking input again
+    sleep(0.03)
+except KeyboardInterrupt:
+  print('\n\nClean up and exit.\n')
+  #mout(dev_port, disable_edit_mode)
+  GPIO.cleanup()
 
