@@ -37,161 +37,22 @@ def bash_cmd_rto(cmd, callback=None):
   # process.poll contains the return code of the process
   return proc.poll()
 
-'''
-state: a 2-digit number where
-- the most significant digit is the LSW position
-- the least significant digit is the FSW pressed (or 0 if no FSW is pressed)
-'''
-current_state = 0
-previous_state = 0
-# key 0: current state, key 1: previous state, key 2: previous state of previous state
-states = {
-  0: 0,
-  1: 0,
-  2: 0
-}
-dev_port = ''
-current_patch = -1
-# dictionary associating states to pedalboard patch
-state_to_patch = {
-  11: 0,
-  12: 1,
-  13: 2,
-  21: 3,
-  22: 4,
-  23: 5,
-  31: 6,
-  32: 7,
-  33: 8
-}
+
 # MIDI commands
-#enable_edit_mode = 'F052005A50F7'
-#disable_edit_mode = 'F052005A51F7'
-#request_current_patch = 'F052005A33F7'
-#request_info_current_patch = 'F052005A29F7'
-state_to_midi_cmd = {
-  10: None,
-  11: None,
-  12: None,
-  13: None,
-  20: None,
-  21: ["B0 47 01", "B0 31 00", "B0 47 03"],
-  22: "B04400",
-  23: ["B0 47 01", "B0 32 00", "B0 47 03"],
-  30: None,
-  31: None,
-  32: None,
-  33: None
+mode_to_midi_cmd = {
+  2: {
+    1: ["B0 47 01", "B0 31 00", "B0 47 03"],
+    2: ["B04400"],
+    3: ["B0 47 01", "B0 32 00", "B0 47 03"]
+  }
 }
  
-def set_state(s):
-  global states
-  states[2] = states[1]
-  states[1] = states[0]
-  states[0] = s
-    
-def get_state(i):
-  global states
-  if i in [0, -1, -2]:
-    i = i*(-1)
-    return states[i]
-
-def set_patch_to_state(s, p):
-  global state_to_patch
-  if s in [11, 12, 13, 21, 22, 23, 31, 32, 33]:
-    # TODO also check is p is in boundaries of specific pedalboard
-    state_to_patch[s] = p
-
-def get_patch_from_state(s):
-  global state_to_patch
-  if s in [11, 12, 13, 21, 22, 23, 31, 32, 33]:
-    return state_to_patch[s]
-  elif s in [10, 20, 30]:
-    return state_to_patch[s+1]
-
 def get_midi_cmd_from_state(s):
   global state_to_midi_cmd
   if s in [11, 12, 13, 21, 22, 23, 31, 32, 33]:
     return state_to_midi_cmd[s]
   elif s in [10, 20, 30]:
     return None
-
-def get_current_patch(port):
-  global request_current_patch
-  o = bash_cmd('amidi -d -t 0.1 -p {} -S {}'.format(port, request_current_patch))
-  # print(o)
-  o = o.split('\n')
-  # print(o)
-  o = o[len(o)-1].replace('C0 ', '')
-  # print(o)
-  o = int(o, 16)
-  # print(o)
-  p = chr(ord('a') + divmod(o, 10)[0]).upper() + str(divmod(o, 10)[1])
-  print('Current patch is {}'.format(p))
-  return o, p
-
-def set_patch_mode(s):
-  l, f = divmod(s, 10)  
-  fsw = 1 if gin(fsw1) == in_True else 2 if gin(fsw2) == in_True else 3 if gin(fsw3) == in_True else 0
-  # wait until no footswitch is pressed
-  while fsw:
-    sleep(0.1)
-    fsw = 1 if gin(fsw1) == in_True else 2 if gin(fsw2) == in_True else 3 if gin(fsw3) == in_True else 0
-  print('Select new patch on pedalboard and press FSW{} again to confirm'.format(f))
-  while fsw != f:
-    blink(fsw_to_led[f], inverted=True)
-    fsw = 1 if gin(fsw1) == in_True else 2 if gin(fsw2) == in_True else 3 if gin(fsw3) == in_True else 0
-  new_patch_number, new_patch_name = get_current_patch(dev_port)
-  set_patch_to_state(s, new_patch_number)
-  print('Associated state {} to patch {}, leaving set_patch_mode'.format(s, new_patch_name))
-
-def transition(s):
-  '''
-  There are 9 possible states: [11,12,13,21,22,23,31,32,33]
-  The first digit represents LSW position, the second digit represents last FSW pressed
-  '''
-  global dev_port
-  global demo
-  # store in l the LSW position and in f the last FSW pressed
-  new_l, new_f = divmod(s, 10)
-  old_l, old_f = divmod(get_state(-1), 10)
-  older_l, older_f = divmod(get_state(-2), 10)
-  if new_l == old_l and new_f == 0:
-    # we reach here if the footswitch has been released after being pressed
-    print("FSW{} released".format(str(old_f)))
-    return
-  #if new_l == older_l and new_f == older_f and new_f+old_f+older_f != 0:
-  #  # we reach here if the same footswitch has been pressed again
-  #  print("FSW{} pressed again, entering set_patch_mode".format(str(new_f)))
-  #  set_patch_mode(s)
-  #  return
-  # we reach here if either the lever has been moved or a different footswitch has been pressed
-  print("Transition to state {} [ LSW{}+FSW{} ]".format(str(s), str(new_l), str(new_f)))
-  all_leds_off()
-  # set led of first row based on lever position
-  if new_l == 1:
-    gout(led1, out_True)
-  elif new_l == 2:
-    gout(led2, out_True)
-  elif new_l == 3:
-    gout(led3, out_True)
-  # set led of second row based on footswitch pressed
-  if new_f == 1:
-    gout(led4, out_True)
-  elif new_f == 2:
-    gout(led5, out_True)
-  elif new_f == 3: 
-    gout(led6, out_True)
-  else:  # default preset for this bank
-    gout(led4, out_True)
-  # send out MIDI command 
-  new_state_cmd = get_midi_cmd_from_state(s)
-  if new_state_cmd is not None:
-    if type(new_state_cmd) == str:
-      mout(dev_port, new_state_cmd, demo)
-    elif type(new_state_cmd) == list:
-      for cmd in new_state_cmd:
-        mout(dev_port, cmd, demo)
 
 # GPIO SETUP
 # inputs and outputs diagram
@@ -287,8 +148,9 @@ class MIDIController():
 
   def __init__(self):
 
-    self.current_state = None
-    self.demo_mode = False
+    # 1: idle, 2: operational, 3: demo 
+    self.mode = 0
+
     self.dev_port = None
 
  
@@ -372,6 +234,12 @@ class MIDIController():
           self.circle(1)
         print('')
 
+  def get_mode(self):
+    return self.mode
+
+  def set_mode(self, mode_n):
+    self.mode = mode_n
+
 # MAIN      
 
 if __name__ == "__main__":
@@ -391,30 +259,23 @@ if __name__ == "__main__":
     print(lsw)
 
     if lsw == 1:
-      mc.demo_mode = True
+      # set idle mode
+      mc.set_mode(1)
 
     elif lsw == 2:
+      mc.set_mode(2)
       # do device discovery
       mc.discover_device()
       #print(mc.dev_port)
 
     elif lsw == 3:
+      # set demo mode
+      mc.set_mode(3)
+
       while True:
         mc.supercar(1)  
 
-    ## check if any footswitch is pressed
-    #fsw = 1 if gin(fsw1) == in_True else 2 if gin(fsw2) == in_True else 3 if gin(fsw3) == in_True else 0
-    ## set current_state as explained in transition function
-    #current_state = 10*lsw + fsw
-    ## check if state has changed
-    #if current_state != get_state(0):
-    #  # update states dict
-    #  set_state(current_state)
-    #  # print(states)
-    #  # apply the effects of the transition
-    #  transition(current_state)
-    #  # block until footswitch is not released
-    #  mc.wait_fsw_released()
+    # mc.wait_fsw_released()
 
     # sleep some time before checking input again
     sleep(0.03)
