@@ -193,155 +193,159 @@ def transition(s):
       for cmd in new_state_cmd:
         mout(dev_port, cmd, demo)
 
-# GPIO SETUP
-# inputs and outputs diagram
-'''
- ____________________________________________________________
-|                                                            |
-|   (lsw1)--O  (lsw2)      (led1)     (led2)     (led3)      |
-|                                                            |
-|         (led4)         (led5)         (led6)               |
-|              (fsw1)         (fsw2)         (fsw3)          |
-|____________________________________________________________|
-
-'''
-# create variables for input and output pins (in GPIO.BOARD mode)
-# footswitches
-fsw1 = 12
-fsw2 = 18
-fsw3 = 32
-# lever switch
-lsw1 = 13
-lsw2 = 11
-# LED in the top row
-led1 = 15
-led2 = 29
-led3 = 31
-# LED in the bottom row
-led4 = 7
-led5 = 16
-led6 = 22
-
-input_pin = {
-  'FSW1': fsw1,
-  'FSW2': fsw2,
-  'FSW3': fsw3,
-  'LSW1': lsw1,
-  'LSW2': lsw2
-}
-output_pin = {
-  'LED1': led1,
-  'LED2': led2,
-  'LED3': led3,
-  'LED4': led4,
-  'LED5': led5,
-  'LED6': led6 
-}
-
-fsw_to_led = {
-  1: led4,
-  2: led5,
-  3: led6
-}
-
-# map LOGICAL TRUE VALUE for INPUT to GPIO voltage level
-in_True = GPIO.LOW
-# the LOGICAL FALSE VALUE for INPUT is a consequence of the other logical value
-in_False = GPIO.LOW if in_True == GPIO.HIGH else GPIO.HIGH
-
-# map LOGICAL TRUE VALUE for OUTPUT to GPIO voltage level
-out_True = GPIO.HIGH
-# the LOGICAL FALSE VALUE for OUTPUT is a consequence of the other logical value
-out_False = GPIO.LOW if out_True == GPIO.HIGH else GPIO.HIGH
-
-# configure pins
-GPIO.setmode(GPIO.BOARD)
-# inputs
-GPIO.setup(list(input_pin.values()), GPIO.IN, pull_up_down=GPIO.PUD_UP)
-# outputs
-GPIO.setup(list(output_pin.values()), GPIO.OUT, initial=out_False)
-
-# read GPIO g
-def gin(g):
-  return GPIO.input(g) == in_True
-
-# write value v on GPIO g
-def gout(g, v):
-  # check if positive logic...
-  if in_True == out_True:
-    if gin(g) != v:
-      GPIO.output(g, out_True if v else out_False)
-  # ...or negative logic
-  else:
-    if gin(g) == v:
-      GPIO.output(g, out_True if v else out_False)
- 
-# lamp test
-for g in list(output_pin.values()):
-  gout(g, True)
-sleep(1)
-for g in list(output_pin.values()):
-  gout(g, False)
+def gpio_setup(input_pin_list, output_pin_list, out_False):
+  # set pin numbering to BOARD mode
+  GPIO.setmode(GPIO.BOARD)
+  # inputs
+  GPIO.setup(input_pin_list, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+  # outputs
+  GPIO.setup(output_pin_list, GPIO.OUT, initial=out_False)
 
 class MIDIController():
 
   def __init__(self):
 
+
+    # inputs and outputs diagram
+    '''
+     ____________________________________________________________
+    |                                                            |
+    |   (lsw1)--O  (lsw2)      (led1)     (led2)     (led3)      |
+    |                                                            |
+    |         (led4)         (led5)         (led6)               |
+    |              (fsw1)         (fsw2)         (fsw3)          |
+    |____________________________________________________________|
+
+    '''
+    # create variables for input and output pins (in GPIO.BOARD mode)
+    # footswitches
+    self.fsw1 = 12
+    self.fsw2 = 18
+    self.fsw3 = 32
+    # lever switch
+    self.lsw1 = 13
+    self.lsw2 = 11
+    # LED in the top row
+    self.led1 = 15
+    self.led2 = 29
+    self.led3 = 31
+    # LED in the bottom row
+    self.led4 = 7
+    self.led5 = 16
+    self.led6 = 22
+
+    self.input_pin = {
+      'FSW1': self.fsw1,
+      'FSW2': self.fsw2,
+      'FSW3': self.fsw3,
+      'LSW1': self.lsw1,
+      'LSW2': self.lsw2
+    }
+    self.output_pin = {
+      'LED1': self.led1,
+      'LED2': self.led2,
+      'LED3': self.led3,
+      'LED4': self.led4,
+      'LED5': self.led5,
+      'LED6': self.led6 
+    }
+
+    self.fsw_to_led = {
+      1: self.led4,
+      2: self.led5,
+      3: self.led6
+    }
+
+    # map LOGICAL TRUE VALUE for INPUT to GPIO voltage level
+    self.in_True = GPIO.LOW
+    # the LOGICAL FALSE VALUE for INPUT is a consequence of the other logical value
+    self.in_False = GPIO.LOW if self.in_True == GPIO.HIGH else GPIO.HIGH
+
+    # map LOGICAL TRUE VALUE for OUTPUT to GPIO voltage level
+    self.out_True = GPIO.HIGH
+    # the LOGICAL FALSE VALUE for OUTPUT is a consequence of the other logical value
+    self.out_False = GPIO.LOW if self.out_True == GPIO.HIGH else GPIO.HIGH
+
+    ## configure pins
+    #GPIO.setmode(GPIO.BOARD)
+    ## inputs
+    #GPIO.setup(list(self.input_pin.values()), GPIO.IN, pull_up_down=GPIO.PUD_UP)
+    ## outputs
+    #GPIO.setup(list(self.output_pin.values()), GPIO.OUT, initial=self.out_False)
+
+    gpio_setup(list(self.input_pin.values()), list(self.output_pin.values()), self.out_False) 
+
+    for g in list(self.output_pin.values()):
+      GPIO.output(g, self.out_True)
+    sleep(1)
+    for g in list(self.output_pin.values()):
+      GPIO.output(g, self.out_False)
+
     self.current_state = None
     self.demo_mode = False
     self.dev_port = None
 
- 
+  # read GPIO g
+  def gin(self, g):
+    return GPIO.input(g) == self.in_True
+  
+  # write value v on GPIO g
+  def gout(self, g, v):
+    if self.gin(g) != v:
+      GPIO.output(g, v == self.out_True)
+  
   # toggle output value of
   def gtog(self, g):
-    gout(g, not gin(g))
+    self.gout(g, not self.gin(g))
 
   def read_inputs(self):
-    return { name: gin(input_pin[name]) for name in input_pin }
+    return { name: self.gin(self.input_pin[name]) for name in self.input_pin }
 
   def wait_fsw_released(self, fsw_list=["FSW1", "FSW2", "FSW3"]):
-    while any([gin(input_pin[fsw]) == in_True for fsw in fsw_list]):
+    while any([self.gin(self.input_pin[fsw]) == self.in_True for fsw in fsw_list]):
       sleep(0.1)
 
   def blink(self, g, t=0.1, cycles=1, inverted=False):
     while cycles:
-      gout(g, out_True if not inverted else out_False)
+      self.gout(g, self.out_True if not inverted else self.out_False)
       sleep(t/2)
-      gout(g, out_False if not inverted else out_True)
+      self.gout(g, self.out_False if not inverted else self.out_True)
       sleep(t/2)
       cycles = cycles-1
 
   def all_leds_off(self):
-    for g in output_pin.values():
-      gout(g, out_False)
+    for g in self.output_pin.values():
+      self.gout(g, self.out_False)
 
   def supercar(self, t):
+    print("supercar")
     self.all_leds_off()
-    for g in [led1, led2, led3, led4, led5, led6]:
-      gout(g, True)
+    for g in [self.led1, self.led2, self.led3, self.led4, self.led5, self.led6]:
+      print(g)
+      self.gout(g, True)
       sleep(t/6)
-      gout(g, False)
+      self.gout(g, False)
 
   def circle(self, t):
     self.all_leds_off()
-    for g in [led1, led2, led3, led6, led5, led4]:
-      gout(g, out_True)
+    for g in [self.led1, self.led2, self.led3, self.led6, self.led5, self.led4]:
+      self.gout(g, self.out_True)
       sleep(t/6)
-      gout(g, out_False)
+      self.gout(g, self.out_False)
 
   def zigzag(self, t):
     self.all_leds_off()
-    for g in [led1, led4, led2, led5, led3, led6]:
-      gout(g, out_True)
+    for g in [self.led1, self.led4, self.led2, self.led5, self.led3, self.led6]:
+      self.gout(g, self.out_True)
       sleep(t/6)
-      gout(g, out_False)
+      self.gout(g, self.out_False)
 
   def lsw_pos(self):
-    if gin(lsw1) == True and gin(lsw2) == False:
+    if self.gin(self.lsw1) == True and self.gin(self.lsw2) == False:
       return 1
-    elif gin(lsw1) == False and gin(lsw2) == False:
+    elif self.gin(self.lsw1) == False and self.gin(self.lsw2) == False:
       return 2
-    elif gin(lsw1) == False and gin(lsw2) == True:
+    elif self.gin(self.lsw1) == False and self.gin(self.lsw2) == True:
       return 3
 
   def mout(self, port, code):
