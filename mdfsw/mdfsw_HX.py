@@ -1,4 +1,5 @@
 import RPi.GPIO as GPIO
+import threading
 from time import sleep
 from os import system
 from subprocess import Popen, PIPE
@@ -37,22 +38,6 @@ def bash_cmd_rto(cmd, callback=None):
   # process.poll contains the return code of the process
   return proc.poll()
 
-
-# MIDI commands
-mode_to_midi_cmd = {
-  2: {
-    1: ["B0 47 01", "B0 31 00", "B0 47 03"],
-    2: ["B04400"],
-    3: ["B0 47 01", "B0 32 00", "B0 47 03"]
-  }
-}
- 
-def get_midi_cmd_from_state(s):
-  global state_to_midi_cmd
-  if s in [11, 12, 13, 21, 22, 23, 31, 32, 33]:
-    return state_to_midi_cmd[s]
-  elif s in [10, 20, 30]:
-    return None
 
 # GPIO SETUP
 # inputs and outputs diagram
@@ -124,18 +109,20 @@ GPIO.setup(list(output_pin.values()), GPIO.OUT, initial=out_False)
 
 # read GPIO g
 def gin(g):
+  #print(g)
   return GPIO.input(g) == in_True
 
 # write value v on GPIO g
 def gout(g, v):
-  # check if positive logic...
-  if in_True == out_True:
-    if gin(g) != v:
-      GPIO.output(g, out_True if v else out_False)
-  # ...or negative logic
-  else:
-    if gin(g) == v:
-      GPIO.output(g, out_True if v else out_False)
+  ## check if positive logic...
+  #if in_True == out_True:
+  #  if gin(g) != v:
+  #    GPIO.output(g, out_True if v else out_False)
+  ## ...or negative logic
+  #else:
+  #  if gin(g) == v:
+  #    GPIO.output(g, out_True if v else out_False)
+  GPIO.output(g, out_True if v else out_False)
  
 # lamp test
 for g in list(output_pin.values()):
@@ -144,14 +131,30 @@ sleep(1)
 for g in list(output_pin.values()):
   gout(g, False)
 
-class MIDIController():
+class MIDIController(threading.Thread):
 
   def __init__(self):
 
-    # 1: idle, 2: operational, 3: demo 
-    self.mode = 0
+    super().__init__()
+
+    # modes
+    # 1: presetdown-tuner-presetup
+    # 2: undefined,
+    # 3: undefined
+    self.mode = -1
+
+    # MIDI commands
+    self.mode_to_fsw_midi_cmd = {
+      1: {
+        1: ["B0 47 01", "B0 31 00", "B0 47 03"],
+        2: ["B04400"],
+        3: ["B0 47 01", "B0 32 00", "B0 47 03"]
+      }
+    }
 
     self.dev_port = None
+
+    self.stop_flag = False
 
  
   # toggle output value of
@@ -164,6 +167,12 @@ class MIDIController():
   def wait_fsw_released(self, fsw_list=["FSW1", "FSW2", "FSW3"]):
     while any([gin(input_pin[fsw]) == in_True for fsw in fsw_list]):
       sleep(0.1)
+
+  def set_output(self, out_name, v):
+    if out_name in output_pin:
+      gout(output_pin[out_name], out_True if v else out_False)
+    else:
+      print("Output {} not defined".format(out_name))
 
   def blink(self, g, t=0.1, cycles=1, inverted=False):
     while cycles:
@@ -217,28 +226,46 @@ class MIDIController():
     # do the following check periodically, until a device is found
     # check that the device is connected and on which port
     print('Start device discovery')
-    while self.dev_port is None:
-      # look for connected devices
-      amidi_list = [line for line in bash_cmd('amidi -l').split('\n') if dev_name in line]
-      if amidi_list:
-        if len(amidi_list) == 1:
-          self.dev_port = amidi_list[0].split()[1]
-          dev = amidi_list[0].split(self.dev_port)[1].strip()
-          print('Found device ' + dev + ' on port ' + self.dev_port)
-        elif len(amidi_list) > 1:
-          sys.exit("Connect only one {} device at a time!".format(dev_name))
-      else:
-        print("{} device not found. Wait some seconds before retrying".format(dev_name), end='')
-        for i in range(3):
-          print('.', end='')
-          self.circle(1)
-        print('')
+    #while self.dev_port is None:
+    # look for connected devices
+    amidi_list = [line for line in bash_cmd('amidi -l').split('\n') if dev_name in line]
+    if amidi_list:
+      if len(amidi_list) == 1:
+        self.dev_port = amidi_list[0].split()[1]
+        dev = amidi_list[0].split(self.dev_port)[1].strip()
+        print('Found device ' + dev + ' on port ' + self.dev_port)
+      elif len(amidi_list) > 1:
+        sys.exit("Connect only one {} device at a time!".format(dev_name))
+    else:
+      print("{} device not found. Wait some seconds before retrying".format(dev_name), end='')
+      self.dev_port = None
+      for i in range(3):
+        print('.', end='')
+        self.circle(1)
+      print('')
+
+  def get_dev_port(self):
+    return self.dev_port
 
   def get_mode(self):
     return self.mode
 
   def set_mode(self, mode_n):
+    print("Setting mode {}".format(mode_n))
     self.mode = mode_n
+
+  def set_stop_flag(self):
+    self.stop_flag = True
+
+  def run(self):
+    while not self.stop_flag:
+      # update the mode based on lever switch position
+      if self.lsw_pos() != self.get_mode():
+        sleep(1)
+        if self.lsw_pos() != self.get_mode():
+          print("Mode changed from {} to {}".format(self.get_mode(), self.lsw_pos()))
+          self.set_mode(self.lsw_pos())
+      sleep(0.2)
 
 # MAIN      
 
@@ -251,28 +278,32 @@ if __name__ == "__main__":
   # print information on state of inputs
   print(mc.read_inputs())
  
+  # set mode based on lever switch position
+  mc.set_mode(mc.lsw_pos())
+
+  mc.start()
+
   try:
 
-    # check lever switch position
-    lsw = mc.lsw_pos()
+    while True:
+      while mc.get_mode() == 1:
+        # do device discovery
+        mc.discover_device()
+        # if device found
+        if mc.get_dev_port():
+          mc.set_output("LED1", True)
+          # check fsw
+          while mc.get_mode() == 1:
+            sleep(0.1)
 
-    print(lsw)
+      while mc.get_mode() == 2:
+        mc.set_output("LED2", True)
+        sleep(1)
+        mc.supercar(1)  
 
-    if lsw == 1:
-      # set idle mode
-      mc.set_mode(1)
-
-    elif lsw == 2:
-      mc.set_mode(2)
-      # do device discovery
-      mc.discover_device()
-      #print(mc.dev_port)
-
-    elif lsw == 3:
-      # set demo mode
-      mc.set_mode(3)
-
-      while True:
+      while mc.get_mode() == 3:
+        mc.set_output("LED3", True)
+        sleep(1)
         mc.supercar(1)  
 
     # mc.wait_fsw_released()
@@ -284,5 +315,7 @@ if __name__ == "__main__":
   finally:
     print('\n\nClean up and exit.\n')
     #mout(dev_port, disable_edit_mode)
+    mc.set_stop_flag()
+    mc.join()
     GPIO.cleanup()
 
