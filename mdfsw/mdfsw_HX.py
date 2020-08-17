@@ -1,18 +1,26 @@
 import RPi.GPIO as GPIO
 import threading
+import os
+import logging
 from time import sleep
-from os import system
 from subprocess import Popen, PIPE
 
+logger = logging.getLogger(os.path.basename(__file__))
+logger.setLevel(logging.DEBUG)
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+formatter = logging.Formatter('[ %(asctime)s ][ %(levelname)s ] %(message)s')
+ch.setFormatter(formatter)
+logger.addHandler(ch)
 
 def bash_cmd(cmd, cmd_print=False, out_print=False):
   if cmd_print:
-    print('Executing command:\n' + cmd)
+    logger.debug('Executing command:\n' + cmd)
   proc = Popen(cmd.split(), stdout=PIPE)
   out, err = proc.communicate()
   out = str(out,'utf-8')
   if out_print:
-    print('Command output:\n' + out)
+    logger.debug('Command output:\n' + out)
   return out
 
 # bash command with real time (line-by-line) output
@@ -34,7 +42,7 @@ def bash_cmd_rto(cmd, callback=None):
       if callback:
         callback(out, cmd)
       else:
-        print(out)
+        logger.debug(out)
   # process.poll contains the return code of the process
   return proc.poll()
 
@@ -165,14 +173,14 @@ class MIDIController(threading.Thread):
     return { name: gin(input_pin[name]) for name in input_pin }
 
   def wait_fsw_released(self, fsw_list=["FSW1", "FSW2", "FSW3"]):
-    while any([gin(input_pin[fsw]) == in_True for fsw in fsw_list]):
+    while any([gin(input_pin[fsw]) for fsw in fsw_list]):
       sleep(0.1)
 
   def set_output(self, out_name, v):
     if out_name in output_pin:
       gout(output_pin[out_name], out_True if v else out_False)
     else:
-      print("Output {} not defined".format(out_name))
+      logger.error("Output {} not defined".format(out_name))
 
   def blink(self, g, t=0.1, cycles=1, inverted=False):
     while cycles:
@@ -215,17 +223,17 @@ class MIDIController(threading.Thread):
     elif gin(lsw1) == False and gin(lsw2) == True:
       return 3
 
-  def mout(self, port, code):
-    if not self.demo_mode:
-      cmd = 'amidi -p ' + port + ' -S ' + code
-      print(cmd)
+  def mout(self, cmd_list):
+    for code in cmd_list:
+      cmd = 'amidi -p ' + self.dev_port + ' -S ' + code
+      logger.debug(cmd)
       bash_cmd(cmd)
 
   def discover_device(self):
     dev_name = "HX Stomp"
     # do the following check periodically, until a device is found
     # check that the device is connected and on which port
-    print('Start device discovery')
+    logger.info('Start device discovery')
     #while self.dev_port is None:
     # look for connected devices
     amidi_list = [line for line in bash_cmd('amidi -l').split('\n') if dev_name in line]
@@ -233,16 +241,14 @@ class MIDIController(threading.Thread):
       if len(amidi_list) == 1:
         self.dev_port = amidi_list[0].split()[1]
         dev = amidi_list[0].split(self.dev_port)[1].strip()
-        print('Found device ' + dev + ' on port ' + self.dev_port)
+        logger.info('Found device ' + dev + ' on port ' + self.dev_port)
       elif len(amidi_list) > 1:
         sys.exit("Connect only one {} device at a time!".format(dev_name))
     else:
-      print("{} device not found. Wait some seconds before retrying".format(dev_name), end='')
+      logger.warning("{} device not found. Wait some seconds before retrying".format(dev_name), end='')
       self.dev_port = None
       for i in range(3):
-        print('.', end='')
         self.circle(1)
-      print('')
 
   def get_dev_port(self):
     return self.dev_port
@@ -251,7 +257,7 @@ class MIDIController(threading.Thread):
     return self.mode
 
   def set_mode(self, mode_n):
-    print("Setting mode {}".format(mode_n))
+    logger.info("Set mode {}".format(mode_n))
     self.mode = mode_n
 
   def set_stop_flag(self):
@@ -263,7 +269,7 @@ class MIDIController(threading.Thread):
       if self.lsw_pos() != self.get_mode():
         sleep(1)
         if self.lsw_pos() != self.get_mode():
-          print("Mode changed from {} to {}".format(self.get_mode(), self.lsw_pos()))
+          logger.debug("Mode changed from {} to {}".format(self.get_mode(), self.lsw_pos()))
           self.set_mode(self.lsw_pos())
       sleep(0.2)
 
@@ -276,7 +282,7 @@ if __name__ == "__main__":
   mc = MIDIController()
 
   # print information on state of inputs
-  print(mc.read_inputs())
+  logger.debug(mc.read_inputs())
  
   # set mode based on lever switch position
   mc.set_mode(mc.lsw_pos())
@@ -292,8 +298,17 @@ if __name__ == "__main__":
         # if device found
         if mc.get_dev_port():
           mc.set_output("LED1", True)
-          # check fsw
           while mc.get_mode() == 1:
+            # check fsw
+            inputs = mc.read_inputs()
+            if inputs["FSW1"]:
+              mc.mout(["B04701", "B03100", "B04703"])
+            elif inputs["FSW2"]:
+              mc.mout(["B04400"])
+            elif inputs["FSW3"]:
+              mc.mout(["B04701", "B03200", "B04703"])
+            mc.wait_fsw_released()
+              
             sleep(0.1)
 
       while mc.get_mode() == 2:
@@ -306,14 +321,13 @@ if __name__ == "__main__":
         sleep(1)
         mc.supercar(1)  
 
-    # mc.wait_fsw_released()
 
-    # sleep some time before checking input again
-    sleep(0.03)
+      # sleep some time before checking input again
+      sleep(0.03)
   except KeyboardInterrupt:
     pass
   finally:
-    print('\n\nClean up and exit.\n')
+    logger.info('\n\nClean up and exit.\n')
     #mout(dev_port, disable_edit_mode)
     mc.set_stop_flag()
     mc.join()
